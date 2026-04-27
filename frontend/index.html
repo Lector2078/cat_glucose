@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cat Glucose Tracker</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Cat Glucose Tracker</h1>
+
+      <section id="authSection" class="card">
+        <h2>Sign In</h2>
+        <form id="loginForm">
+          <label>Username <input id="username" required /></label>
+          <label>Password <input id="password" type="password" required /></label>
+          <button type="submit">Sign In</button>
+        </form>
+      </section>
+
+      <section id="appSection" class="hidden">
+        <div class="grid2">
+          <section class="card">
+            <h2>Cats</h2>
+            <form id="catForm">
+              <input type="hidden" id="catId" />
+              <label>Name <input id="catName" required maxlength="120" /></label>
+              <label>Birth Date <input id="catBirthDate" placeholder="YYYY-MM-DD" /></label>
+              <label>Notes <textarea id="catNotes"></textarea></label>
+              <button type="submit">Save Cat</button>
+              <button type="button" id="catFormReset">Clear</button>
+            </form>
+            <ul id="catList"></ul>
+          </section>
+
+          <section class="card">
+            <h2>Manual Reading</h2>
+            <form id="readingForm">
+              <label>Cat <select id="readingCat" required></select></label>
+              <label>Timestamp (ISO) <input id="readingAt" required placeholder="2026-04-27T08:00:00" /></label>
+              <label>Glucose (mg/dL) <input id="readingValue" type="number" min="10" max="1000" step="0.1" required /></label>
+              <label>Context <input id="readingContext" /></label>
+              <label>Notes <textarea id="readingNotes"></textarea></label>
+              <button type="submit">Add Reading</button>
+            </form>
+          </section>
+        </div>
+
+        <section class="card">
+          <h2>Readings</h2>
+          <div class="row">
+            <label>Filter Cat <select id="filterCat"><option value="">All</option></select></label>
+            <button id="refreshReadings">Refresh</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Cat</th><th>When</th><th>Glucose</th><th>Context</th><th>Source</th><th></th></tr>
+            </thead>
+            <tbody id="readingTableBody"></tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2>Import File</h2>
+          <form id="importPreviewForm">
+            <label>Cat <select id="importCat" required></select></label>
+            <label>File <input id="importFile" type="file" accept=".csv,.xlsx,.txt" required /></label>
+            <button type="submit">Preview File</button>
+          </form>
+
+          <div id="mappingSection" class="hidden">
+            <h3>Column Mapping</h3>
+            <div class="grid3">
+              <label>Date/Time Column <select id="datetimeColumn"></select></label>
+              <label>Glucose Column <select id="glucoseColumn"></select></label>
+              <label>Context Column <select id="contextColumn"><option value="">None</option></select></label>
+              <label>Notes Column <select id="notesColumn"><option value="">None</option></select></label>
+            </div>
+            <button id="commitImport">Commit Import</button>
+          </div>
+
+          <pre id="previewOutput"></pre>
+        </section>
+
+        <section class="card">
+          <h2>Import Jobs</h2>
+          <button id="refreshJobs">Refresh Jobs</button>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>File</th><th>Status</th><th>Inserted</th><th>Rejected</th><th>Errors</th></tr>
+            </thead>
+            <tbody id="jobsTableBody"></tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2>Metabase</h2>
+          <p>Open your dashboard at the configured Metabase domain.</p>
+          <button id="loadMetabaseSql">Show Read-Only SQL</button>
+          <pre id="metabaseSql"></pre>
+        </section>
+      </section>
+    </main>
+    <script src="/assets/app.js"></script>
+  </body>
+  </html>

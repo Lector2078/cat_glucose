@@ -1,0 +1,62 @@
+services:
+  caddy:
+    image: caddy:2.9
+    container_name: cat_glucose_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - metabase
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+    container_name: cat_glucose_web
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    depends_on:
+      - postgres
+    expose:
+      - "8000"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cat_glucose_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+
+  metabase:
+    image: metabase/metabase:v0.53.4
+    container_name: cat_glucose_metabase
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+    volumes:
+      - metabase_data:/metabase-data
+    depends_on:
+      - postgres
+    expose:
+      - "3000"
+
+volumes:
+  postgres_data:
+  metabase_data:
+  caddy_data:
+  caddy_config:
