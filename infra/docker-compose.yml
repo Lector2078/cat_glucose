@@ -1,24 +1,4 @@
 services:
-  caddy:
-    image: caddy:2.9
-    container_name: cat_glucose_caddy
-    restart: unless-stopped
-    env_file:
-      - ../.env
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN}
-      METABASE_DOMAIN: ${METABASE_DOMAIN}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - web
-      - metabase
-
   web:
     build:
       context: ..
@@ -29,7 +9,7 @@ services:
       - ../.env
     depends_on:
       - postgres
-    expose:
+    ports:
       - "8000"
 
   postgres:
@@ -59,11 +39,9 @@ services:
       - metabase_data:/metabase-data
     depends_on:
       - postgres
-    expose:
+    ports:
       - "3000"
 
 volumes:
   postgres_data:
   metabase_data:
-  caddy_data:
-  caddy_config:
