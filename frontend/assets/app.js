@@ -3,9 +3,29 @@ const appSection = document.getElementById("appSection");
 const previewOutput = document.getElementById("previewOutput");
 const mappingSection = document.getElementById("mappingSection");
 const metabaseSql = document.getElementById("metabaseSql");
+const importStatus = document.getElementById("importStatus");
 
 let cats = [];
 let previewState = null;
+
+function setImportStatus(message, isError = false) {
+  if (!importStatus) return;
+  importStatus.textContent = message;
+  importStatus.classList.toggle("error", isError);
+}
+
+async function apiForm(path, formData) {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed (${response.status})`);
+  }
+  return response.json();
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -199,23 +219,35 @@ function fillColumnSelects(columns) {
 
 document.getElementById("importPreviewForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const previewBtn = document.getElementById("previewFileBtn");
   const file = document.getElementById("importFile").files[0];
-  if (!file) return;
+  if (!file) {
+    setImportStatus("Choose a .csv, .xlsx, or .txt file first.", true);
+    return;
+  }
+
   const formData = new FormData();
   formData.set("file", file);
-  const response = await fetch("/api/import/preview", {
-    method: "POST",
-    credentials: "include",
-    body: formData,
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
+  previewBtn.disabled = true;
+  setImportStatus("Loading preview...");
+  try {
+    const data = await apiForm("/api/import/preview", formData);
+    previewState = data;
+    previewOutput.textContent = JSON.stringify(data.preview, null, 2);
+    fillColumnSelects(data.columns);
+    mappingSection.classList.remove("hidden");
+    if (cats.length === 0) {
+      setImportStatus("Preview loaded. Create a cat above before committing import.", true);
+    } else {
+      setImportStatus(`Preview loaded: ${data.row_count} row(s), ${data.columns.length} column(s).`);
+    }
+  } catch (err) {
+    console.error(err);
+    setImportStatus(err.message || "Preview failed.", true);
+    alert(`Preview failed: ${err.message || "Unknown error"}`);
+  } finally {
+    previewBtn.disabled = false;
   }
-  const data = await response.json();
-  previewState = data;
-  previewOutput.textContent = JSON.stringify(data.preview, null, 2);
-  fillColumnSelects(data.columns);
-  mappingSection.classList.remove("hidden");
 });
 
 document.getElementById("commitImport").addEventListener("click", async () => {
@@ -226,7 +258,15 @@ document.getElementById("commitImport").addEventListener("click", async () => {
   const contextColumn = document.getElementById("contextColumn").value;
   const notesColumn = document.getElementById("notesColumn").value;
   if (!previewState || !file || !catId || !datetimeColumn || !glucoseColumn) {
-    alert("Preview and required mappings are needed first");
+    const msg = !previewState
+      ? "Run Preview File first."
+      : !file
+        ? "Re-select the same file before committing."
+        : !catId
+          ? "Select a cat for import."
+          : "Map date/time and glucose columns.";
+    setImportStatus(msg, true);
+    alert(msg);
     return;
   }
 
@@ -240,18 +280,20 @@ document.getElementById("commitImport").addEventListener("click", async () => {
   if (contextColumn) params.set("context_column", contextColumn);
   if (notesColumn) params.set("notes_column", notesColumn);
 
-  const response = await fetch(`/api/import/commit?${params.toString()}`, {
-    method: "POST",
-    credentials: "include",
-    body: formData,
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
+  setImportStatus("Importing...");
+  try {
+    const result = await apiForm(`/api/import/commit?${params.toString()}`, formData);
+    previewOutput.textContent = `Import complete:\n${JSON.stringify(result, null, 2)}`;
+    setImportStatus(
+      `Import finished: ${result.rows_inserted} inserted, ${result.rows_rejected} rejected.`,
+    );
+    await loadReadings();
+    await loadJobs();
+  } catch (err) {
+    console.error(err);
+    setImportStatus(err.message || "Import failed.", true);
+    alert(`Import failed: ${err.message || "Unknown error"}`);
   }
-  const result = await response.json();
-  previewOutput.textContent = `Import complete:\n${JSON.stringify(result, null, 2)}`;
-  await loadReadings();
-  await loadJobs();
 });
 
 document.getElementById("loadMetabaseSql").addEventListener("click", async () => {

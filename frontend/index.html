@@ -64,13 +64,14 @@
         <section class="card">
           <h2>Import File</h2>
           <form id="importPreviewForm">
-            <label>Cat <select id="importCat" required></select></label>
             <label>File <input id="importFile" type="file" accept=".csv,.xlsx,.txt" required /></label>
-            <button type="submit">Preview File</button>
+            <button type="submit" id="previewFileBtn">Preview File</button>
           </form>
+          <p id="importStatus" class="import-status" aria-live="polite"></p>
 
           <div id="mappingSection" class="hidden">
             <h3>Column Mapping</h3>
+            <label>Cat <select id="importCat" required></select></label>
             <div class="grid3">
               <label>Date/Time Column <select id="datetimeColumn"></select></label>
               <label>Glucose Column <select id="glucoseColumn"></select></label>

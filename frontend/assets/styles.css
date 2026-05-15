@@ -75,6 +75,16 @@ td {
   align-items: end;
 }
 
+.import-status {
+  margin: 8px 0 0;
+  min-height: 1.25rem;
+  color: #374151;
+}
+
+.import-status.error {
+  color: #b91c1c;
+}
+
 pre {
   background: #111827;
   color: #f9fafb;
