@@ -85,11 +85,17 @@ td {
   color: #b91c1c;
 }
 
-pre {
+#previewOutput {
   background: #111827;
   color: #f9fafb;
   padding: 10px;
   border-radius: 6px;
   white-space: pre-wrap;
   word-break: break-word;
+  min-height: 3rem;
+}
+
+#previewOutput:empty::before {
+  content: "Preview results will appear here.";
+  color: #9ca3af;
 }

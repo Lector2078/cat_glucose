@@ -181,7 +181,12 @@ async def preview_import(
     content = await file.read()
     file_format = detect_format(file.filename or "")
     rows = _extract_parsed_rows(file_format, content)
-    columns = sorted({k for row in rows for k in row.keys()})
+    columns = sorted({k for row in rows for k in row.keys() if k})
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="No data rows found. Check file format (CSV/XLSX/TXT) and delimiter.",
+        )
     return {
         "filename": file.filename,
         "format": file_format,

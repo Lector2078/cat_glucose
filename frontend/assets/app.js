@@ -228,14 +228,19 @@ document.getElementById("importPreviewForm").addEventListener("submit", async (e
 
   const formData = new FormData();
   formData.set("file", file);
-  previewBtn.disabled = true;
+  if (previewBtn) previewBtn.disabled = true;
   setImportStatus("Loading preview...");
+  previewOutput.textContent = "";
   try {
     const data = await apiForm("/api/import/preview", formData);
     previewState = data;
+    if (!data.columns || data.columns.length === 0) {
+      throw new Error("File parsed but no columns were detected. Check the header row.");
+    }
     previewOutput.textContent = JSON.stringify(data.preview, null, 2);
     fillColumnSelects(data.columns);
     mappingSection.classList.remove("hidden");
+    mappingSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
     if (cats.length === 0) {
       setImportStatus("Preview loaded. Create a cat above before committing import.", true);
     } else {
@@ -243,10 +248,13 @@ document.getElementById("importPreviewForm").addEventListener("submit", async (e
     }
   } catch (err) {
     console.error(err);
+    previewState = null;
+    mappingSection.classList.add("hidden");
+    previewOutput.textContent = "";
     setImportStatus(err.message || "Preview failed.", true);
     alert(`Preview failed: ${err.message || "Unknown error"}`);
   } finally {
-    previewBtn.disabled = false;
+    if (previewBtn) previewBtn.disabled = false;
   }
 });
 

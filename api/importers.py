@@ -7,11 +7,47 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 
+def _non_empty_row(row: dict) -> bool:
+    return any(str(v).strip() for v in row.values() if v is not None)
+
+
 def parse_csv(content: bytes) -> list[dict]:
     text = content.decode("utf-8-sig", errors="ignore")
-    stream = io.StringIO(text)
-    reader = csv.DictReader(stream)
-    return [dict(row) for row in reader]
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    # Some glucose exports include title rows before the real header.
+    header_idx = 0
+    for i, line in enumerate(lines[:20]):
+        lower = line.lower()
+        if any(token in lower for token in ("date", "time", "glucose", "value", "reading")):
+            header_idx = i
+            break
+
+    body = "\n".join(lines[header_idx:])
+    stream = io.StringIO(body)
+    sample = body[:4096]
+
+    dialect = csv.excel
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        pass
+
+    reader = csv.DictReader(stream, dialect=dialect)
+    rows = [dict(row) for row in reader if _non_empty_row(row)]
+    if rows:
+        return rows
+
+    # Fallback when sniffer picks the wrong delimiter.
+    for delimiter in (";", ",", "\t", "|"):
+        stream = io.StringIO(body)
+        reader = csv.DictReader(stream, delimiter=delimiter)
+        rows = [dict(row) for row in reader if _non_empty_row(row)]
+        if len(rows) > 0 and len(rows[0].keys()) > 1:
+            return rows
+    return []
 
 
 def parse_xlsx(content: bytes) -> list[dict]:
