@@ -17,7 +17,17 @@ from sqlalchemy.orm import Session
 
 from .auth import issue_session, require_auth, verify_credentials
 from .database import Base, engine, get_db
-from .importers import detect_format, normalize_datetime, parse_csv, parse_txt, parse_xlsx, row_to_string
+from .importers import (
+    detect_format,
+    normalize_datetime,
+    parse_csv,
+    parse_glucose_value,
+    parse_txt,
+    parse_xlsx,
+    resolve_glucose_reading,
+    row_to_string,
+    suggest_import_columns,
+)
 from .models import Cat, GlucoseReading, ImportJob, ImportRow, ImportStatus, ParseStatus, ReadingSource
 from .schemas import CatCreate, CatRead, ImportJobRead, LoginRequest, ReadingCreate, ReadingRead
 
@@ -187,12 +197,14 @@ async def preview_import(
             status_code=400,
             detail="No data rows found. Check file format (CSV/XLSX/TXT) and delimiter.",
         )
+    suggestions = suggest_import_columns(columns)
     return {
         "filename": file.filename,
         "format": file_format,
         "row_count": len(rows),
         "columns": columns,
         "preview": rows[:max_rows],
+        "suggested_columns": suggestions,
     }
 
 
@@ -226,28 +238,32 @@ async def commit_import(
     for row in rows:
         raw_payload = row_to_string(row)
         try:
-            dt_raw = row.get(datetime_column)
-            glucose_raw = row.get(glucose_column)
-            if dt_raw is None or glucose_raw is None:
-                raise ValueError("Missing required mapped columns")
+            with db.begin_nested():
+                dt_raw = row.get(datetime_column)
+                if dt_raw is None:
+                    raise ValueError("Missing required mapped columns")
+                glucose_raw, glucose_source_column = resolve_glucose_reading(row, glucose_column)
 
-            reading = GlucoseReading(
-                cat_id=cat_id,
-                reading_at=normalize_datetime(str(dt_raw)),
-                glucose_value=float(glucose_raw),
-                unit="mg/dL",
-                context=str(row.get(context_column, "")).strip() or None if context_column else None,
-                notes=str(row.get(notes_column, "")).strip() or None if notes_column else None,
-                source=ReadingSource.import_file,
-            )
-            db.add(reading)
-            db.flush()
-            db.add(ImportRow(import_job_id=job.id, raw_payload=raw_payload, parse_status=ParseStatus.accepted))
+                reading = GlucoseReading(
+                    cat_id=cat_id,
+                    reading_at=normalize_datetime(str(dt_raw)),
+                    glucose_value=parse_glucose_value(glucose_raw, glucose_source_column),
+                    unit="mg/dL",
+                    context=str(row.get(context_column, "")).strip() or None if context_column else None,
+                    notes=str(row.get(notes_column, "")).strip() or None if notes_column else None,
+                    source=ReadingSource.import_file,
+                )
+                db.add(reading)
+                db.flush()
+                db.add(
+                    ImportRow(
+                        import_job_id=job.id,
+                        raw_payload=raw_payload,
+                        parse_status=ParseStatus.accepted,
+                    )
+                )
             inserted += 1
         except Exception as exc:  # noqa: BLE001
-            db.rollback()
-            db.add(job)
-            db.flush()
             db.add(
                 ImportRow(
                     import_job_id=job.id,
@@ -262,7 +278,7 @@ async def commit_import(
     job.rows_total = len(rows)
     job.rows_inserted = inserted
     job.rows_rejected = rejected
-    job.status = ImportStatus.completed if rejected == 0 else ImportStatus.failed
+    job.status = ImportStatus.completed if inserted > 0 else ImportStatus.failed
 
     if error_rows:
         report_file = error_reports_dir / f"import-job-{job.id}-errors.csv"

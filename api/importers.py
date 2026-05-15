@@ -6,9 +6,41 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+MMOL_L_TO_MG_DL = 18.0182
+_LIBRE_GLUCOSE_FALLBACK_COLUMNS = (
+    "Historic Glucose mmol/L",
+    "Scan Glucose mmol/L",
+    "Strip Glucose mmol/L",
+)
+_DATETIME_FORMATS = (
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%d-%m-%Y %H:%M:%S",
+    "%d-%m-%Y %H:%M",
+    "%m/%d/%Y %H:%M:%S",
+    "%m/%d/%Y %H:%M",
+)
+
 
 def _non_empty_row(row: dict) -> bool:
     return any(str(v).strip() for v in row.values() if v is not None)
+
+
+def _find_csv_header_idx(lines: list[str]) -> int:
+    for i, line in enumerate(lines[:20]):
+        lower = line.lower()
+        if "device timestamp" in lower:
+            return i
+    for i, line in enumerate(lines[:20]):
+        lower = line.lower()
+        if "timestamp" in lower and "glucose" in lower:
+            return i
+    for i, line in enumerate(lines[:20]):
+        lower = line.lower()
+        if any(token in lower for token in ("datetime", "date/time", "reading_at")):
+            return i
+    return 0
 
 
 def parse_csv(content: bytes) -> list[dict]:
@@ -17,13 +49,7 @@ def parse_csv(content: bytes) -> list[dict]:
     if not lines:
         return []
 
-    # Some glucose exports include title rows before the real header.
-    header_idx = 0
-    for i, line in enumerate(lines[:20]):
-        lower = line.lower()
-        if any(token in lower for token in ("date", "time", "glucose", "value", "reading")):
-            header_idx = i
-            break
+    header_idx = _find_csv_header_idx(lines)
 
     body = "\n".join(lines[header_idx:])
     stream = io.StringIO(body)
@@ -99,8 +125,55 @@ def normalize_datetime(value: str) -> datetime:
     value = value.strip()
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError(f"Invalid datetime '{value}'") from exc
+    except ValueError:
+        pass
+    for fmt in _DATETIME_FORMATS:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid datetime '{value}'")
+
+
+def parse_glucose_value(raw: object, glucose_column: str) -> float:
+    text = str(raw).strip().replace(",", "")
+    if not text:
+        raise ValueError("Glucose value is empty")
+    value = float(text)
+    if "mmol" in glucose_column.lower():
+        value = value * MMOL_L_TO_MG_DL
+    return value
+
+
+def resolve_glucose_reading(row: dict, glucose_column: str) -> tuple[object, str]:
+    primary = row.get(glucose_column)
+    if str(primary or "").strip():
+        return primary, glucose_column
+
+    for column in _LIBRE_GLUCOSE_FALLBACK_COLUMNS:
+        if column == glucose_column:
+            continue
+        candidate = row.get(column)
+        if str(candidate or "").strip():
+            return candidate, column
+
+    raise ValueError("Glucose value is empty")
+
+
+def suggest_import_columns(columns: list[str]) -> dict[str, str | None]:
+    datetime_col = None
+    glucose_col = None
+    for col in columns:
+        lower = col.lower()
+        if datetime_col is None and ("device timestamp" in lower or lower == "timestamp" or "date/time" in lower):
+            datetime_col = col
+        if glucose_col is None and "glucose" in lower and "mmol" in lower:
+            glucose_col = col
+        elif glucose_col is None and "historic glucose" in lower:
+            glucose_col = col
+        elif glucose_col is None and lower in ("glucose", "glucose_value", "value"):
+            glucose_col = col
+    return {"datetime_column": datetime_col, "glucose_column": glucose_col}
 
 
 def row_to_string(row: dict) -> str:

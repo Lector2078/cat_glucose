@@ -207,7 +207,7 @@ document.getElementById("refreshReadings").addEventListener("click", loadReading
 document.getElementById("filterCat").addEventListener("change", loadReadings);
 document.getElementById("refreshJobs").addEventListener("click", loadJobs);
 
-function fillColumnSelects(columns) {
+function fillColumnSelects(columns, suggestions = {}) {
   const targets = ["datetimeColumn", "glucoseColumn", "contextColumn", "notesColumn"];
   targets.forEach((id) => {
     const select = document.getElementById(id);
@@ -215,6 +215,12 @@ function fillColumnSelects(columns) {
     const prefix = startsWithNone ? '<option value="">None</option>' : "";
     select.innerHTML = prefix + columns.map((c) => `<option value="${c}">${c}</option>`).join("");
   });
+  if (suggestions.datetime_column) {
+    document.getElementById("datetimeColumn").value = suggestions.datetime_column;
+  }
+  if (suggestions.glucose_column) {
+    document.getElementById("glucoseColumn").value = suggestions.glucose_column;
+  }
 }
 
 document.getElementById("importPreviewForm").addEventListener("submit", async (e) => {
@@ -238,7 +244,7 @@ document.getElementById("importPreviewForm").addEventListener("submit", async (e
       throw new Error("File parsed but no columns were detected. Check the header row.");
     }
     previewOutput.textContent = JSON.stringify(data.preview, null, 2);
-    fillColumnSelects(data.columns);
+    fillColumnSelects(data.columns, data.suggested_columns || {});
     mappingSection.classList.remove("hidden");
     mappingSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
     if (cats.length === 0) {
